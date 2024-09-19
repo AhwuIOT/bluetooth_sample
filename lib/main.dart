@@ -92,7 +92,7 @@ class _BLEScanScreenState extends State<BLEScanScreen> {
 
   void connectToDevice(BluetoothDevice device) {
     // Implement connection logic here
-    print('Connecting to ${device.name}');
+    print('Connecting to ${device.advName}');
     // Navigate to a new screen for device interaction
     Navigator.push(
       context,
@@ -113,7 +113,9 @@ class DeviceScreen extends StatefulWidget {
 }
 
 class _DeviceScreenState extends State<DeviceScreen> {
+  bool _isDisposed = false;
   BluetoothCharacteristic? _characteristic;
+  String _receivedData = '';
 
   @override
   void initState() {
@@ -122,43 +124,51 @@ class _DeviceScreenState extends State<DeviceScreen> {
   }
 
   void _connectToDevice() async {
+    if (_isDisposed) return;
     try {
       await widget.device.connect();
-      print('Connected to ${widget.device.advName}');
-      _discoverServices();
+      if (!_isDisposed) {
+        setState(() {
+          // 更新連接狀態
+        });
+        print('Connected to ${widget.device.advName}');
+        _discoverServices();
+      }
     } catch (e) {
       print('Error connecting to device: $e');
     }
   }
 
   void _discoverServices() async {
+    if (_isDisposed) return;
     List<BluetoothService> services = await widget.device.discoverServices();
-    services.forEach((service) {
-      // 根據你的設備特性，找到正確的服務和特徵
-      // 這裡假設我們知道特定的UUID
-      if (service.uuid.toString() == '295a8771-1529-4765-950f-a5fdb3e4537c') {
-        var characteristics = service.characteristics;
-        for (BluetoothCharacteristic c in characteristics) {
-          if (c.uuid.toString() == '295a8771-1529-4765-950f-a5fdb3e4537c') {
-            setState(() {
-              _characteristic = c;
-            });
-            break;
-          }
-        }
-      }
-    });
+    if (!_isDisposed) {
+      services.forEach((service) {
+        print('Service: ${service.uuid}');
+        service.characteristics.forEach((characteristic) {
+          print('Characteristic: ${characteristic.uuid}');
+          _characteristic = characteristic;
+        });
+      });
+      // 處理服務發現結果
+    }
   }
 
-  // void _writeValue() async {
-  //   if (_characteristic != null) {
-  //     List<int> value = [0x01, 0x02, 0x03]; // 要寫入的值
-  //     await _characteristic!.write(value);
-  //     print('Value written successfully');
-  //   } else {
-  //     print('Characteristic not found');
-  //   }
-  // }
+  void _subscribeToCharacteristic() async {
+    if (_characteristic != null) {
+      await _characteristic!.setNotifyValue(true);
+      _characteristic!.lastValueStream.listen((value) {
+        print("69${value}");
+        if (!_isDisposed) {
+          setState(() {
+            _receivedData = utf8.decode(value);
+          });
+          print('Received data: $_receivedData');
+        }
+      });
+    }
+  }
+
   void _writeValue() async {
     if (_characteristic != null) {
       List<int> value = utf8.encode("ON"); // 將 "ON" 轉換為 UTF-8 編碼的字節
@@ -178,11 +188,29 @@ class _DeviceScreenState extends State<DeviceScreen> {
     return Scaffold(
       appBar: AppBar(title: Text(widget.device.advName ?? 'Unknown device')),
       body: Center(
-        child: ElevatedButton(
-          child: Text('Write Value'),
-          onPressed: _writeValue,
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Text('Received Data: $_receivedData'),
+            ElevatedButton(
+              child: Text('Write "ON"'),
+              onPressed: _writeValue,
+            ),
+            ElevatedButton(
+              child: Text('Read Value'),
+              onPressed: _subscribeToCharacteristic,
+            ),
+          ],
         ),
       ),
     );
+  }
+
+  @override
+  void dispose() {
+    _isDisposed = true;
+    _characteristic?.setNotifyValue(false);
+    widget.device.disconnect();
+    super.dispose();
   }
 }
