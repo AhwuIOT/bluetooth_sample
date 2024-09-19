@@ -50,7 +50,9 @@ class _BLEScanScreenState extends State<BLEScanScreen> {
 
   void startScan() async {
     try {
-      await FlutterBluePlus.startScan(timeout: Duration(seconds: 4));
+      await FlutterBluePlus.startScan(
+        timeout: Duration(seconds: 4),
+      );
       FlutterBluePlus.scanResults.listen((results) {
         setState(() {
           scanResults = results;
@@ -141,24 +143,40 @@ class _DeviceScreenState extends State<DeviceScreen> {
 
   void _discoverServices() async {
     if (_isDisposed) return;
-    List<BluetoothService> services = await widget.device.discoverServices();
-    if (!_isDisposed) {
-      services.forEach((service) {
-        print('Service: ${service.uuid}');
-        service.characteristics.forEach((characteristic) {
-          print('Characteristic: ${characteristic.uuid}');
-          _characteristic = characteristic;
-        });
-      });
-      // 處理服務發現結果
+    try {
+      List<BluetoothService> services = await widget.device.discoverServices();
+      if (!_isDisposed) {
+        for (var service in services) {
+          print('Service found: ${service.uuid}');
+          for (var characteristic in service.characteristics) {
+            print('  Characteristic found: ${characteristic.uuid}');
+            print('  Properties: ${characteristic.properties}');
+            if (characteristic.properties.read) {
+              print('  This characteristic is readable');
+            }
+            if (characteristic.properties.write) {
+              print('  This characteristic is writable');
+            }
+            if (characteristic.properties.notify) {
+              print('  This characteristic supports notifications');
+            }
+          }
+        }
+        // 選擇正確的特徵
+        _characteristic = services.expand((s) => s.characteristics).firstWhere(
+            (c) => c.uuid.toString() == '295a8771-1529-4765-950f-a5fdb3e4537c');
+        print('Selected characteristic: ${_characteristic?.uuid}');
+      }
+    } catch (e) {
+      print('Error discovering services: $e');
     }
   }
 
   void _subscribeToCharacteristic() async {
+    print("71${_characteristic}");
     if (_characteristic != null) {
-      await _characteristic!.setNotifyValue(true);
-      _characteristic!.lastValueStream.listen((value) {
-        print("69${value}");
+      await _characteristic!.read(); //如果用android手機，這行會報錯，所以改用setNotifyValue
+      _characteristic!.onValueReceived.listen((value) {
         if (!_isDisposed) {
           setState(() {
             _receivedData = utf8.decode(value);
@@ -198,7 +216,9 @@ class _DeviceScreenState extends State<DeviceScreen> {
             ),
             ElevatedButton(
               child: Text('Read Value'),
-              onPressed: _subscribeToCharacteristic,
+              onPressed: () {
+                _subscribeToCharacteristic();
+              },
             ),
           ],
         ),

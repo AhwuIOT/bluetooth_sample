@@ -9,8 +9,10 @@ environment:
 dependencies:
   flutter:
     sdk: flutter
-  flutter_blue_plus: ^1.5.2
-  permission_handler: ^11.1.0
+  flutter_blue_plus: 
+  permission_handler:
+  shared_preferences:
+  provider:
 dev_dependencies:
   flutter_test:
     sdk: flutter
